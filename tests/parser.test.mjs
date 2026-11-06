@@ -1,0 +1,117 @@
+// Run: node tests/parser.test.mjs   (optionally: node tests/parser.test.mjs path/to/unzipped/map)
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { parseInfo, parseDifficulty, adaptMap, makeBeatClock, spawnAheadSeconds, CUT_VECTOR } from '../js/songs/mapparser.js';
+import { synthesizeDemoSong, generateDemoMap } from '../js/songs/demo.js';
+
+let passed = 0;
+function test(name, fn) {
+  try { fn(); passed++; console.log('  ok  ' + name); }
+  catch (e) { console.error('  FAIL ' + name + '\n', e); process.exitCode = 1; }
+}
+
+test('info v2', () => {
+  const info = parseInfo({
+    _version: '2.0.0', _songName: 'A', _songAuthorName: 'B', _levelAuthorName: 'C', _beatsPerMinute: 120,
+    _songFilename: 'song.egg', _coverImageFilename: 'cover.jpg',
+    _difficultyBeatmapSets: [{ _beatmapCharacteristicName: 'Standard', _difficultyBeatmaps: [
+      { _difficulty: 'Expert', _beatmapFilename: 'Expert.dat', _noteJumpMovementSpeed: 16, _noteJumpStartBeatOffset: 0 }] }],
+  });
+  assert.equal(info.title, 'A'); assert.equal(info.bpm, 120); assert.equal(info.songFile, 'song.egg');
+  assert.equal(info.sets[0].diffs[0].file, 'Expert.dat'); assert.equal(info.sets[0].diffs[0].njs, 16);
+});
+
+test('info v4', () => {
+  const info = parseInfo({
+    version: '4.0.0', song: { title: 'T', author: 'Au' }, audio: { songFilename: 's.ogg', bpm: 150 },
+    coverImageFilename: 'c.png',
+    difficultyBeatmaps: [{ characteristic: 'Standard', difficulty: 'Hard', beatmapDataFilename: 'Hard.dat', noteJumpMovementSpeed: 14 }],
+  });
+  assert.equal(info.title, 'T'); assert.equal(info.bpm, 150); assert.equal(info.sets[0].diffs[0].file, 'Hard.dat');
+});
+
+test('difficulty v2 notes/bombs/walls in seconds', () => {
+  const m = parseDifficulty({ _version: '2.0.0',
+    _notes: [{ _time: 2, _lineIndex: 1, _lineLayer: 0, _type: 0, _cutDirection: 1 },
+             { _time: 4, _lineIndex: 2, _lineLayer: 2, _type: 3, _cutDirection: 0 },
+             { _time: 1, _lineIndex: 9, _lineLayer: 0, _type: 1, _cutDirection: 1 }],
+    _obstacles: [{ _time: 4, _lineIndex: 0, _type: 0, _duration: 2, _width: 1 }] }, 120, 0);
+  assert.equal(m.notes.length, 1, 'out-of-range lane dropped');
+  assert.equal(m.notes[0].t, 1); assert.equal(m.bombs.length, 1); assert.equal(m.bombs[0].t, 2);
+  assert.equal(m.walls[0].dur, 1); assert.equal(m.walls[0].h, 5);
+});
+
+test('difficulty v3 with bpm change', () => {
+  const m = parseDifficulty({ version: '3.2.0', bpmEvents: [{ b: 0, m: 60 }, { b: 4, m: 120 }],
+    colorNotes: [{ b: 6, x: 1, y: 1, c: 1, d: 3 }], bombNotes: [{ b: 2, x: 0, y: 0 }],
+    obstacles: [{ b: 4, x: 0, y: 0, d: 2, w: 2, h: 5 }] }, 100, 0);
+  // beats 0-4 at 60bpm = 4s, then 2 beats at 120 = 1s
+  assert.equal(m.notes[0].t, 5); assert.equal(m.bombs[0].t, 2);
+  assert.equal(m.walls[0].t, 4); assert.equal(m.walls[0].dur, 1);
+});
+
+test('difficulty v4 indexed data', () => {
+  const m = parseDifficulty({ version: '4.0.0',
+    colorNotes: [{ b: 4, i: 0 }, { b: 8, i: 1 }], colorNotesData: [{ x: 0, y: 0, c: 0, d: 1 }, { x: 3, y: 2, c: 1, d: 8 }],
+    bombNotes: [{ b: 2, i: 0 }], bombNotesData: [{ x: 1, y: 1 }],
+    obstacles: [{ b: 1, i: 0 }], obstaclesData: [{ d: 1, x: 1, y: 0, w: 1, h: 5 }] }, 120, 0);
+  assert.equal(m.notes.length, 2); assert.equal(m.notes[1].t, 4); assert.equal(m.notes[1].d, 8);
+  assert.equal(m.bombs[0].t, 1); assert.equal(m.walls[0].dur, 0.5);
+});
+
+test('beat clock', () => {
+  const s = makeBeatClock(120, [{ b: 8, m: 240 }]);
+  assert.equal(s(8), 4); assert.equal(s(12), 5);
+});
+
+test('one-saber adaptation', () => {
+  const map = { notes: [
+    { t: 1, x: 1, y: 0, c: 0, d: 1 }, { t: 1.01, x: 2, y: 0, c: 1, d: 1 },
+    { t: 1.05, x: 2, y: 0, c: 1, d: 0 }, { t: 1.5, x: 2, y: 1, c: 0, d: 0 }],
+    bombs: [{ t: 1.5, x: 2, y: 2 }, { t: 3, x: 0, y: 0 }],
+    walls: [{ t: 2, dur: 1, x: 0, w: 4, y: 0, h: 5 }, { t: 3, dur: 1, x: 1, w: 2, y: 0, h: 5 }] };
+  const a = adaptMap(map, { oneSaber: true });
+  assert.equal(a.notes.length, 2); assert.equal(a.notes[0].c, 1);
+  assert.equal(a.bombs.length, 1); assert.equal(a.walls.length, 1, 'full-width wall removed');
+});
+
+test('spawn ahead bounds', () => {
+  const s = spawnAheadSeconds(120, 16, 0);
+  assert.ok(s >= 0.85 && s <= 2.2);
+  assert.equal(CUT_VECTOR[1][1], -1); // down cut swings down
+  assert.ok(Math.abs(CUT_VECTOR[3][0] - 1) < 1e-9); // right cut swings right
+});
+
+test('demo song synthesis + maps', () => {
+  const song = synthesizeDemoSong(8000);
+  assert.equal(song.channels.length, 2);
+  let peak = 0, nan = false;
+  for (const v of song.channels[0]) { if (Number.isNaN(v)) nan = true; peak = Math.max(peak, Math.abs(v)); }
+  assert.ok(!nan, 'no NaN'); assert.ok(peak > 0.3 && peak <= 1, 'peak ' + peak);
+  for (const d of ['Easy', 'Normal', 'Hard']) {
+    const m = generateDemoMap(d);
+    assert.ok(m.notes.length > 20, d + ' notes ' + m.notes.length);
+    for (const n of m.notes) assert.ok(n.t > 0 && n.t < song.duration && n.x >= 0 && n.x <= 3 && n.y >= 0 && n.y <= 2 && n.d >= 0 && n.d <= 8);
+    assert.ok(m.walls.length >= 4);
+    console.log('       ' + d + ': ' + m.notes.length + ' notes, ' + m.bombs.length + ' bombs, ' + m.walls.length + ' walls');
+  }
+});
+
+// Optional: parse a real unzipped map directory.
+const dir = process.argv[2];
+if (dir) {
+  test('real map ' + dir, () => {
+    const files = fs.readdirSync(dir);
+    const infoName = files.find(f => f.toLowerCase() === 'info.dat');
+    const info = parseInfo(JSON.parse(fs.readFileSync(path.join(dir, infoName), 'utf8').replace(/^﻿/, '')));
+    for (const set of info.sets) for (const d of set.diffs) {
+      const m = parseDifficulty(JSON.parse(fs.readFileSync(path.join(dir, d.file), 'utf8').replace(/^﻿/, '')), info.bpm, info.songTimeOffset);
+      const a = adaptMap(m, { oneSaber: true });
+      console.log(`       ${set.characteristic}/${d.difficulty}: ${m.notes.length} notes -> ${a.notes.length} one-saber, ${m.bombs.length}->${a.bombs.length} bombs, ${m.walls.length}->${a.walls.length} walls, last t=${m.notes.length ? m.notes[m.notes.length - 1].t.toFixed(1) : '-'}s`);
+      assert.ok(m.notes.length > 0);
+    }
+  });
+}
+
+console.log(passed + ' tests passed');

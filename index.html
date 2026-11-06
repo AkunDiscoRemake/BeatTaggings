@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#07030d">
+  <meta name="description" content="Beat Taggings — jogo de ritmo em WebVR com um sabre roxo, feito para o Oculus Go.">
+  <title>Beat Taggings</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2307030d'/%3E%3Cpath d='M18 50 L46 14' stroke='%23c77dff' stroke-width='7' stroke-linecap='round'/%3E%3Cpath d='M18 50 L46 14' stroke='%23fff' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
+  <!-- Zip reader (UMD global `fflate`) -->
+  <script src="vendor/fflate.min.js"></script>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <div id="overlay">
+    <div class="card">
+      <h1><span>BEAT</span> TAGGINGS</h1>
+      <p class="tag">Ritmo · Corte · Desvie — um sabre, um touchpad, nenhuma instalação.</p>
+      <p id="status">Carregando…</p>
+      <noscript><p class="error">Este jogo precisa de JavaScript.</p></noscript>
+      <div class="buttons">
+        <button id="btn-vr" disabled>ENTRAR NO VR</button>
+        <button id="btn-flat" class="secondary">JOGAR NA TELA</button>
+      </div>
+      <div class="help">
+        <div><b>Oculus Go</b> · gatilho = selecionar · touchpad = mover para os lados / rolar listas · voltar (ou segurar o gatilho) = pausar</div>
+        <div><b>Tela</b> · mouse = sabre · clique = selecionar · A/D ou ←/→ = mover · Esc = pausar</div>
+        <div class="small">Músicas e mapas da comunidade via <a href="https://beatsaver.com" target="_blank" rel="noopener">BeatSaver</a>. Inclui a faixa original offline “Neon Tag”.</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="corner" class="hidden">
+    <button id="btn-corner-vr" class="hidden">VR</button>
+    <span id="fps"></span>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

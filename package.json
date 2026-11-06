@@ -1,0 +1,13 @@
+{
+  "name": "beat-taggings",
+  "version": "1.0.0",
+  "description": "Beat Taggings — WebXR one-saber rhythm game for Oculus Go (3DoF), with BeatSaver map integration.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node tools/serve.mjs",
+    "test": "node tests/parser.test.mjs",
+    "test:e2e": "node tests/e2e.mjs"
+  },
+  "license": "MIT"
+}
