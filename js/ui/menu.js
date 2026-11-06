@@ -390,7 +390,7 @@ export class Menu {
       ['Pontos', 'Golpes rápidos e centralizados valem mais. Acertos seguidos sobem o multiplicador até x8.'],
       ['Blocos pretos', 'NÃO toque neles com o sabre. Paredes pretas: desvie o corpo com o touchpad.'],
       ['Touchpad', 'Toque à esquerda/direita para se mover lateralmente. Solte para voltar ao centro.'],
-      ['Barreiras', 'Barra preta no alto: ABAIXE-SE (agache ou curve a cabeça). Parede lateral: desvie.'],
+      ['Barreiras', 'Barra no alto: ABAIXE-SE (agache, curve a cabeça ou APERTE o touchpad). Parede lateral: desvie.'],
       ['Pausa', 'Botão Voltar ou segure o gatilho por 1 segundo durante a música.'],
       ['Energia', 'Erros e paredes drenam a barra. Se zerar, a música falha (a menos que No Fail esteja ligado).'],
       ['Recentralizar', 'Segure o botão Oculus do controle para recentralizar a visão e o sabre.'],

@@ -225,6 +225,7 @@ export class Input {
     this._prevTrigger = trig;
     this.trigger = trig;
     this.triggerHeld = trig ? this.triggerHeld + dt : 0;
+    this.touchClick = tClick;
     this.touchClickPressed = tClick && !this._prevTClick;
     this._prevTClick = tClick;
     this.backPressed = back;

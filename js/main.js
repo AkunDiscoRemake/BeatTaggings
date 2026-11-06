@@ -436,11 +436,14 @@ class App {
       this.posture.force(pmode !== 'off' && this.input.crouchKey ? 1 : 0, pmode !== 'off' ? this.input.leanKey : 0, dt);
       this.posture.source = 'teclado (S = agachar, Q/E = inclinar)';
     } else {
-      this.posture.update(dt, this.camera.quaternion, pmode, this.settings.get('postureSens'), { active: touch.touchActive, x: touch.touchX, y: touch.touchY });
+      const assist = st === 'playing' && this.game.upcomingBarrier() === 'crouch';
+      this.posture.update(dt, this.camera.quaternion, pmode, this.settings.get('postureSens'),
+        { active: touch.touchActive, x: touch.touchX, y: touch.touchY, press: touch.touchClick }, assist);
     }
     const applyPosture = st === 'playing' || st === 'countdown' || st === 'finishing';
     const crouch = applyPosture ? this.posture.crouch : 0;
     const lean = applyPosture ? this.posture.lean : 0;
+    this.game.playerCrouch = crouch;
     this.head.position.set(lean * LAYOUT.leanMax, this.headBaseY - crouch * LAYOUT.crouchDrop, 0);
     const sp = LAYOUT.saberPivot;
     this.saber.group.position.set(sp.x + lean * LAYOUT.leanMax * 0.7, sp.y - crouch * LAYOUT.crouchDrop * 0.8, sp.z);

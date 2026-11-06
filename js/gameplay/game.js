@@ -62,6 +62,7 @@ export class Game {
     this._inWall = false;
     this._wallSfxT = 0;
     this.hitLog = null; // set to [] to record per-hit details (debug/tests)
+    this.playerCrouch = 0; // 0..1, set by the app every frame
     this.pending = [];
     for (let i = 0; i < 16; i++) this.pending.push({ active: false, n: null, x: 0, y: 0, z: 0, t0: 0, best: 0, peak: 0, dirOk: true });
   }
@@ -101,6 +102,7 @@ export class Game {
     this.score.totalNotes = this.notes.length;
     for (const n of this.notes) n.done = false;
     for (const b of this.bombs) b.done = false;
+    for (const w of this.walls) w.safe = false;
     this.ni = 0; this.bi = 0; this.wi = 0;
     this.activeNotes.length = 0; this.activeBombs.length = 0; this.activeWalls.length = 0;
     for (const p of this.pending) p.active = false;
@@ -219,8 +221,18 @@ export class Game {
       const zNear = hitZ + (t - wl.t) * v;
       const zFar = zNear - wl.dur * v;
       if (zFar > LAYOUT.despawnZ) continue;
-      if (wl.harmful && zFar - r <= head.z && zNear + r >= head.z &&
-          head.x + r > wl.x0 && head.x - r < wl.x1 && head.y + r > wl.y0 && head.y - r < wl.y1) inWall = true;
+      if (wl.harmful && zFar - r <= head.z && zNear + r >= head.z && head.x + r > wl.x0 && head.x - r < wl.x1) {
+        if (wl.overhead) {
+          // Overhead bar: judged by the crouch STATE (independent of the player's real height).
+          // Crouched when entering = safe; only standing back up clearly (< 0.2) while under it hurts.
+          const c = this.playerCrouch;
+          if (c >= 0.45) wl.safe = true;
+          else if (c < 0.2) wl.safe = false;
+          if (!wl.safe) inWall = true;
+        } else if (head.y + r > wl.y0 && head.y - r < wl.y1) {
+          inWall = true;
+        }
+      }
       this.activeWalls[w++] = wl;
     }
     this.activeWalls.length = w;

@@ -101,7 +101,9 @@ export class PostureTracker {
 
   // headQuat: head orientation (THREE.Quaternion) or null; mode: auto | tilt | touchpad | off
   // sens: 0.7 (low) .. 1.4 (high); touch: {active, x, y}
-  update(dt, headQuat, mode, sens, touch) {
+  // assist: an overhead barrier is coming -> much easier thresholds.
+  // touch.press: touchpad clicked (held) -> crouch in every mode except 'off'.
+  update(dt, headQuat, mode, sens, touch, assist) {
     sens = sens || 1;
     // --- head tilt ---
     if (headQuat) {
@@ -112,7 +114,7 @@ export class PostureTracker {
       const roll = Math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.x * q.x + q.z * q.z));
       this.pitchDeg = pitch * 180 / Math.PI;
       this.rollDeg = roll * 180 / Math.PI;
-      const start = 42 / sens, full = start + 18;
+      const start = (assist ? 17 : 42) / sens, full = start + (assist ? 12 : 18);
       this.tiltCrouch = clamp01((-this.pitchDeg - start) / (full - start));
       const r = Math.abs(this.rollDeg);
       this.tiltLean = clamp01((r - 9 / sens) / 18) * (this.rollDeg > 0 ? -1 : 1);
@@ -121,7 +123,7 @@ export class PostureTracker {
     }
     // --- accelerometer ---
     if (this.accelActive) {
-      this.accelCrouch = clamp01((-this.dy - 0.05) / (0.15 / sens));
+      this.accelCrouch = clamp01((-this.dy - (assist ? 0.025 : 0.05)) / ((assist ? 0.08 : 0.15) / sens));
       this.accelLean = Math.max(-1, Math.min(1, this.dx / (0.2 / sens)));
     } else {
       this.accelCrouch = 0; this.accelLean = 0;
@@ -137,6 +139,7 @@ export class PostureTracker {
     } else if (mode === 'touchpad') {
       c = touch && touch.active && touch.y > 0.45 ? 1 : 0; src = 'touchpad (parte de baixo)';
     }
+    if (mode !== 'off' && touch && touch.press) c = 1; // clicking the touchpad always crouches
     this.source = src;
     const k = Math.min(1, dt * 12);
     this.crouch += (c - this.crouch) * k;

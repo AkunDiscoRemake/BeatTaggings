@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseInfo, parseDifficulty, adaptMap, makeBeatClock, spawnAheadSeconds, CUT_VECTOR, generateBarriers } from '../js/songs/mapparser.js';
 import { PostureTracker } from '../js/input/posture.js';
+import { Game } from '../js/gameplay/game.js';
 import { synthesizeDemoSong, generateDemoMap } from '../js/songs/demo.js';
 
 let passed = 0;
@@ -147,6 +148,25 @@ test('head tilt fallback: bow -> crouch, roll -> lean', () => {
   assert.ok(p.crouch < 0.05);
   for (let i = 0; i < 60; i++) p.update(1 / 60, q(0, 30), 'tilt', 1, null);
   assert.ok(p.lean < -0.8, 'roll left -> lean left ' + p.lean);
+});
+
+test('overhead barrier: crouched at entry passes, standing gets hit', () => {
+  const noop = new Proxy({}, { get: () => () => {} });
+  const run = (crouchAt) => {
+    let clock = 0;
+    const audio = { playMusic() {}, stopMusic() {}, play() {}, fadeOutMusic() {}, songTime: () => clock };
+    const settings = { get: (k) => ({ noteSpeed: 1, audioOffsetMs: 0, strictDirection: false, noFail: true }[k]) };
+    const saber = { base: { x: 0, y: 0, z: 9 }, tip: { x: 0, y: 0, z: 9 }, prevBase: { x: 0, y: 0, z: 9 }, prevTip: { x: 0, y: 0, z: 9 }, tipSpeed: 0, swingPeak: 0, tipVel: { x: 0, y: 0, z: 0 }, hitFlash() {} };
+    const g = new Game({ objects: Object.assign(noop, { maxWalls: 12 }), particles: noop, audio, saber, env: noop, settings, input: noop });
+    g.load({ title: 't', audioBuffer: { duration: 10 }, bpm: 120, njs: 10, map: { notes: [], bombs: [], walls: [{ t: 3, dur: 0.5, x: 0, w: 4, y: 2, h: 3 }] } });
+    g.start();
+    for (clock = 0; clock < 6; clock += 1 / 60) { g.playerCrouch = crouchAt(clock); g.update(1 / 60, { x: 0, y: 1.0, z: 0 }); }
+    return g.score.wallHits;
+  };
+  assert.equal(run(() => 1), 0, 'fully crouched passes');
+  assert.equal(run(() => 0), 1, 'standing is hit (even with a low head y)');
+  assert.equal(run((t) => (t < 3.2 ? 1 : 0.3)), 0, 'half rising under the bar is forgiven');
+  assert.equal(run((t) => (t < 3.2 ? 1 : 0)), 1, 'standing up fully under the bar is hit');
 });
 
 // Optional: parse a real unzipped map directory.
