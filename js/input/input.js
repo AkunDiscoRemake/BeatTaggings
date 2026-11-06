@@ -32,6 +32,8 @@ export class Input {
     this.backPressed = false;
     this.swipe = 0;
     this.moveAxis = 0; // keyboard lateral axis
+    this.crouchKey = false; // flat mode: S / C / Ctrl
+    this.leanKey = 0;       // flat mode: Q (-1) / E (+1)
 
     this.inputSource = null;
     this.controller = null;
@@ -189,6 +191,8 @@ export class Input {
       let axis = 0;
       if (this._keys.KeyA || this._keys.ArrowLeft) axis -= 1;
       if (this._keys.KeyD || this._keys.ArrowRight) axis += 1;
+      this.crouchKey = !!(this._keys.KeyS || this._keys.KeyC || this._keys.ControlLeft);
+      this.leanKey = (this._keys.KeyE ? 1 : 0) - (this._keys.KeyQ ? 1 : 0);
       this.touchActive = axis !== 0;
       this.touchX = axis;
       this.touchY = 0;

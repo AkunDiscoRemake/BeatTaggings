@@ -210,13 +210,14 @@ export function generateDemoMap(difficulty) {
     }
     if (sec === 'break') {
       // Dodge section: alternate walls; notes appear on the safe side.
+      // left wall, overhead bar (crouch), right wall, overhead bar
       const pattern = [
-        { x: 0, w: 2, safe: 3 },
-        { x: 2, w: 2, safe: 0 },
-        { x: 1, w: 2, safe: 3 },
-        { x: 0, w: 2, safe: 3 },
+        { x: 0, w: 2, y: 0, h: 5, safe: 3 },
+        { x: 0, w: 4, y: 2, h: 3, safe: 1 },
+        { x: 2, w: 2, y: 0, h: 5, safe: 0 },
+        { x: 0, w: 4, y: 2, h: 3, safe: 2 },
       ][bar - 24];
-      walls.push({ t: (b0 + 0.5) * BEAT, dur: 2.5 * BEAT, x: pattern.x, w: pattern.w, y: 0, h: 5 });
+      walls.push({ t: (b0 + 0.5) * BEAT, dur: (pattern.y ? 1.5 : 2.5) * BEAT, x: pattern.x, w: pattern.w, y: pattern.y, h: pattern.h });
       if (level > 0) {
         note(b0 + 2, pattern.safe, { d: 1, y: 1 });
         note(b0 + 3, pattern.safe, { d: 0, y: 0 });

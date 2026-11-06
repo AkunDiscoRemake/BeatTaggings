@@ -185,6 +185,7 @@ export class Menu {
       case 'detail': this.drawDetail(p); break;
       case 'settings': this.drawSettings(p); break;
       case 'howto': this.drawHowTo(p); break;
+      case 'posture': this.drawPosture(p); break;
       case 'loading': this.drawLoading(p); break;
       case 'error': this.drawError(p); break;
       case 'pause': this.drawPause(p); break;
@@ -355,22 +356,30 @@ export class Menu {
       { label: 'Volume dos efeitos', value: Math.round(s.get('sfxVolume') * 100) + '%', dec: function () { s.set('sfxVolume', Math.max(0, Math.round((s.get('sfxVolume') - 0.1) * 10) / 10)); }, inc: function () { s.set('sfxVolume', Math.min(1, Math.round((s.get('sfxVolume') + 0.1) * 10) / 10)); } },
       { label: 'Touchpad', value: s.get('moveMode') === 'absolute' ? 'Posição (volta ao centro)' : 'Deslizar contínuo', cycle: function () { s.set('moveMode', s.get('moveMode') === 'absolute' ? 'velocity' : 'absolute'); } },
       { label: 'Mostrar FPS', value: s.get('showFps') ? 'Ligado' : 'Desligado', cycle: function () { s.set('showFps', !s.get('showFps')); } },
+      { label: 'Agachar / inclinar', value: { auto: 'Acelerômetro + cabeça', tilt: 'Inclinar a cabeça', touchpad: 'Touchpad (baixo)', off: 'Desligado' }[s.get('posture')], cycle: function () {
+        const order = ['auto', 'tilt', 'touchpad', 'off'];
+        s.set('posture', order[(order.indexOf(s.get('posture')) + 1) % order.length]);
+      } },
+      { label: 'Sensibilidade da postura', value: s.get('postureSens') < 0.85 ? 'Baixa' : s.get('postureSens') > 1.15 ? 'Alta' : 'Média', cycle: function () {
+        const v = s.get('postureSens'); s.set('postureSens', v < 0.85 ? 1.0 : v > 1.15 ? 0.7 : 1.4);
+      } },
+      { label: 'Barreiras extras', value: s.get('extraBarriers') ? 'Ligado' : 'Desligado', cycle: function () { s.set('extraBarriers', !s.get('extraBarriers')); } },
     ];
-    const y0 = 120, rh = 62;
+    const y0 = 100, rh = 50;
     rows.forEach(function (r, i) {
       const y = y0 + i * rh;
       p.rect(40, y, W - 80, rh - 8, i % 2 ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.07)', 12);
-      p.text(r.label, 70, y + (rh - 8) / 2, 28, '#ffffff', 'left', '700', 520);
-      if (r.hint) p.text(r.hint, 70 + 300, y + (rh - 8) / 2 + 2, 18, CSS_COLORS.dim, 'left', '500');
+      p.text(r.label, 70, y + (rh - 8) / 2, 25, '#ffffff', 'left', '700', 520);
+      if (r.hint) p.text(r.hint, 70 + 270, y + (rh - 8) / 2 + 2, 17, CSS_COLORS.dim, 'left', '500');
       if (r.cycle) {
-        p.button('set-' + i, 760, y + 3, 440, rh - 14, r.value, function () { r.cycle(); self.invalidate(); }, { size: 26 });
+        p.button('set-' + i, 760, y + 1, 440, rh - 10, r.value, function () { r.cycle(); self.invalidate(); }, { size: 23 });
       } else {
-        p.button('dec-' + i, 760, y + 3, 90, rh - 14, '−', function () { r.dec(); self.invalidate(); }, { size: 34 });
-        p.text(r.value, 980, y + (rh - 8) / 2, 28, CSS_COLORS.purpleHot, 'center', '800');
-        p.button('inc-' + i, 1110, y + 3, 90, rh - 14, '+', function () { r.inc(); self.invalidate(); }, { size: 34 });
+        p.button('dec-' + i, 760, y + 1, 90, rh - 10, '−', function () { r.dec(); self.invalidate(); }, { size: 30 });
+        p.text(r.value, 980, y + (rh - 8) / 2, 25, CSS_COLORS.purpleHot, 'center', '800');
+        p.button('inc-' + i, 1110, y + 1, 90, rh - 10, '+', function () { r.inc(); self.invalidate(); }, { size: 30 });
       }
     });
-    p.text('Dica: use “Atraso do áudio” se os blocos chegarem fora do ritmo.', W / 2, 765, 22, CSS_COLORS.dim, 'center', '600');
+    p.button('posture-test', W / 2 - 230, 742, 460, 50, 'TESTAR POSTURA / SENSORES', function () { self.go('posture'); }, { size: 22, selected: true });
   }
 
   drawHowTo(p) {
@@ -381,15 +390,46 @@ export class Menu {
       ['Pontos', 'Golpes rápidos e centralizados valem mais. Acertos seguidos sobem o multiplicador até x8.'],
       ['Blocos pretos', 'NÃO toque neles com o sabre. Paredes pretas: desvie o corpo com o touchpad.'],
       ['Touchpad', 'Toque à esquerda/direita para se mover lateralmente. Solte para voltar ao centro.'],
+      ['Barreiras', 'Barra preta no alto: ABAIXE-SE (agache ou curve a cabeça). Parede lateral: desvie.'],
       ['Pausa', 'Botão Voltar ou segure o gatilho por 1 segundo durante a música.'],
       ['Energia', 'Erros e paredes drenam a barra. Se zerar, a música falha (a menos que No Fail esteja ligado).'],
       ['Recentralizar', 'Segure o botão Oculus do controle para recentralizar a visão e o sabre.'],
     ];
     lines.forEach(function (l, i) {
-      const y = 140 + i * 78;
+      const y = 135 + i * 72;
       p.text(l[0], 70, y, 30, CSS_COLORS.purpleHot, 'left', '800');
       p.text(l[1], 330, y, 25, '#ffffff', 'left', '600', 880);
     });
+  }
+
+  drawPosture(p) {
+    const app = this.app;
+    const pt = app.posture;
+    this.header(p, 'TESTAR POSTURA', true);
+    const xr = app.renderer.xr.isPresenting;
+    p.text('Fonte ativa: ' + pt.source, W / 2, 140, 28, '#ffffff', 'center', '800', 1150);
+    const accel = pt.accelActive ? 'RECEBENDO (' + pt.motionEvents + ' leituras)' : (pt.motionEvents ? 'parou de enviar' : 'sem dados do navegador');
+    p.text('Acelerômetro: ' + accel, W / 2, 190, 26, pt.accelActive ? CSS_COLORS.good : CSS_COLORS.bad, 'center', '700', 1150);
+    const rows = [
+      ['Acel. vertical', pt.rawVert.toFixed(2) + ' m/s²'],
+      ['Acel. lateral', pt.rawLat.toFixed(2) + ' m/s²'],
+      ['Deslocamento vertical', (pt.dy * 100).toFixed(0) + ' cm'],
+      ['Inclinação frente/trás', pt.pitchDeg.toFixed(0) + '°'],
+      ['Inclinação lateral', pt.rollDeg.toFixed(0) + '°'],
+    ];
+    rows.forEach(function (r, i) {
+      const y = 250 + i * 50;
+      p.text(r[0], 200, y, 26, CSS_COLORS.dim, 'left', '700');
+      p.text(r[1], 1080, y, 28, '#ffffff', 'right', '800');
+    });
+    p.text('AGACHAR', 200, 530, 28, CSS_COLORS.purpleHot, 'left', '800');
+    p.bar(400, 516, 680, 30, pt.crouch, CSS_COLORS.note0);
+    p.text('INCLINAR', 200, 590, 28, CSS_COLORS.purpleHot, 'left', '800');
+    p.rect(400, 576, 680, 30, 'rgba(255,255,255,0.12)', 15);
+    const cx = 740 + pt.lean * 330;
+    p.rect(cx - 20, 572, 40, 38, CSS_COLORS.purpleHot, 12);
+    p.text(xr ? 'Abaixe-se rápido / curve a cabeça para baixo, ou incline o corpo para os lados.' : 'No modo tela: S = agachar, Q/E = inclinar (os sensores funcionam dentro do VR).', W / 2, 670, 23, CSS_COLORS.dim, 'center', '600', 1150);
+    p.text('Se o acelerômetro não chegar, o jogo usa a inclinação da cabeça automaticamente.', W / 2, 710, 21, 'rgba(255,255,255,0.5)', 'center', '500', 1150);
   }
 
   drawLoading(p) {

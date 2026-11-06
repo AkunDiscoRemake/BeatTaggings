@@ -15,11 +15,14 @@ Jogo de ritmo em **WebXR para o Oculus Go**, com **um único sabre roxo** na mã
 | Mover para os lados / desviar | touchpad (esquerda/direita) | A/D ou ←/→ |
 | Rolar listas | deslizar no touchpad (cima/baixo) | roda do mouse, ↑/↓ |
 | Pausar / voltar | botão Voltar, ou segurar o gatilho por 1 s | Esc / P |
+| Agachar (barreiras no alto) | abaixar o corpo (acelerômetro) ou curvar a cabeça para baixo | S / C |
+| Inclinar o corpo | inclinar o corpo / tombar a cabeça para o lado | Q / E |
 
 * **Blocos coloridos** (magenta e violeta): corte-os. A seta indica a direção ideal do golpe e o ponto aceita qualquer direção. Golpes rápidos e que passam pelo centro do bloco valem mais (até 115 pontos × multiplicador).
 * **Combo e multiplicador**: x1 → x2 → x4 → x8. Um erro reseta o combo e desce um nível do multiplicador.
 * **Blocos pretos com X**: são obstáculos. Tocar neles com o sabre tira energia.
 * **Paredes pretas**: desvie movendo o corpo com o touchpad. Ficar dentro de uma parede drena energia.
+* **Barreiras**: paredes pretas laterais (desvie para o lado) e **barras no alto** (abaixe-se para passar por baixo). O HUD avisa **ABAIXE!** / **DESVIE**. Com **Barreiras extras** ligado, trechos sem notas de qualquer mapa viram uma pista de obstáculos no ritmo da música.
 * **Energia**: se zerar, a música falha (a menos que **Sem falha** esteja ligado).
 * No fim aparecem pontuação, precisão, rank (SS/S/A/B/C/D), combo máximo e recorde local.
 
@@ -102,6 +105,13 @@ tools/serve.mjs             servidor estático local
 * A lâmina tem 3 camadas (núcleo branco, interna lilás, halo roxo) com shader fresnel aditivo, pulso de energia e cintilação. É um "bloom" sem pós-processamento.
 * Tem flares no emissor e na ponta, rastro luminoso (ribbon com fade), partículas quando o sabre se move rápido, brilho projetado no chão, animação de ignição e flash a cada acerto. Os blocos cortados se partem em duas metades orientadas pelo golpe.
 
+### Postura: agachar e inclinar (`js/input/posture.js`)
+O Oculus Go tem uma IMU (acelerômetro, giroscópio e magnetômetro), mas o WebXR entrega à página só a **rotação**. Por isso o jogo combina duas fontes:
+1. **Acelerômetro**, via `DeviceMotionEvent`, quando o navegador o fornece. A aceleração vertical vem da **magnitude** do vetor medido menos a gravidade estimada, o que a torna imune a girar ou balançar a cabeça. Uma integração dupla "vazada" transforma a aceleração no deslocamento de curto prazo de um agachamento (volta sozinha a zero quando você para). O eixo lateral, com a gravidade removida, dá a inclinação do corpo.
+2. **Inclinação da cabeça** (sempre disponível): curvar a cabeça para baixo agacha, e tombar para o lado inclina.
+
+O modo padrão "Acelerômetro + cabeça" usa o maior sinal dos dois. Também há os modos "Inclinar a cabeça", "Touchpad (baixo)" e "Desligado", além de sensibilidade Baixa/Média/Alta. A tela **Configurações → TESTAR POSTURA** mostra ao vivo qual sensor está chegando, as leituras e as barras de agachar e inclinar. Com o agachar desligado, as barras superiores são removidas dos mapas.
+
 ### Performance (Snapdragon 821 / Adreno 530)
 * Nenhuma luz dinâmica, nenhum pós-processamento e nenhuma sombra. Só materiais unlit, matcap e shaders curtos.
 * Os blocos, os blocos pretos e os detritos usam `InstancedMesh` (1 draw call por tipo). As partículas são um único `Points` com buffer fixo. Os arcos de neon são um único mesh mesclado.
@@ -116,7 +126,8 @@ tools/serve.mjs             servidor estático local
 * `npm test`: o parser v2/v3/v4, os BPM events, a adaptação para 1 sabre e a síntese da música passam. Também validei com 3 mapas reais baixados do BeatSaver (v2 e v3).
 * `npm run test:e2e` (Chromium headless, WebGL por software):
   * A navegação nos menus 3D por cliques do ponteiro funciona (biblioteca do BeatSaver ao vivo → aba Offline → detalhes → Jogar), assim como a pausa.
-  * A música "Neon Tag" (Normal) foi jogada inteira com `?autoplay=1`: **121/123 acertos, 0 paredes atingidas**, tela de resultados exibida e nenhum erro de JS.
+  * A música "Neon Tag" (Normal) foi jogada inteira com `?autoplay=1`, inclusive barreiras laterais e superiores (agachando): **123/123 (full combo), 0 barreiras atingidas**, tela de resultados exibida e nenhum erro de JS.
+* Testes de unidade da postura: um agachamento simulado no acelerômetro (~45 cm) é detectado e volta a "em pé". A inclinação da cabeça também é testada (curvar → agachar, tombar → inclinar).
   * Um mapa real do BeatSaver foi baixado (9,6 MB), descompactado, teve o `.egg` decodificado e foi jogado sem erros.
 * **Ainda não testado num Oculus Go físico** (não havia headset disponível). Recomendo, no primeiro uso, calibrar o "Atraso do áudio" e escolher a qualidade gráfica. O preset Médio é o padrão.
 

@@ -78,6 +78,7 @@ export class Game {
         x0: (w.x - 2) * LAYOUT.laneWidth, x1: (w.x + w.w - 2) * LAYOUT.laneWidth,
         y0: y0, y1: y1,
         harmful: y0 < LAYOUT.headHeight + 0.05 && y1 > LAYOUT.headHeight - 0.25,
+        overhead: w.y >= 2,
       };
     });
     const njs = Math.max(8, Math.min(22, song.njs > 0 ? song.njs : 10));
@@ -394,11 +395,34 @@ export class Game {
     return true;
   }
 
+  // Next barrier the player must react to: 'crouch' | 'side' | null (HUD warning).
+  upcomingBarrier() {
+    const t = this.songTime;
+    for (let i = 0; i < this.activeWalls.length; i++) {
+      const wl = this.activeWalls[i];
+      if (!wl.harmful) continue;
+      const until = wl.t - t;
+      if (until < 1.4 && wl.t + wl.dur + 0.2 > t) return wl.overhead ? 'crouch' : 'side';
+    }
+    return null;
+  }
+
+  // Debug autoplay: crouch while an overhead barrier passes the head.
+  autoCrouch() {
+    const t = this.songTime;
+    for (let i = 0; i < this.walls.length; i++) {
+      const wl = this.walls[i];
+      if (wl.overhead && wl.t - 0.35 < t && wl.t + wl.dur + 0.25 > t) return 1;
+      if (wl.t > t + 1) break;
+    }
+    return 0;
+  }
+
   autoDodge(headX) {
     const t = this.songTime;
     for (let i = 0; i < this.walls.length; i++) {
       const wl = this.walls[i];
-      if (!wl.harmful || wl.t + wl.dur < t - 0.2 || wl.t > t + 1.2) continue;
+      if (!wl.harmful || wl.overhead || wl.t + wl.dur < t - 0.2 || wl.t > t + 1.2) continue;
       const r = LAYOUT.headRadius + 0.1;
       if (headX + r > wl.x0 && headX - r < wl.x1) {
         const left = wl.x0 - r, right = wl.x1 + r;

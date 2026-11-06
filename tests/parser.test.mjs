@@ -2,7 +2,8 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { parseInfo, parseDifficulty, adaptMap, makeBeatClock, spawnAheadSeconds, CUT_VECTOR } from '../js/songs/mapparser.js';
+import { parseInfo, parseDifficulty, adaptMap, makeBeatClock, spawnAheadSeconds, CUT_VECTOR, generateBarriers } from '../js/songs/mapparser.js';
+import { PostureTracker } from '../js/input/posture.js';
 import { synthesizeDemoSong, generateDemoMap } from '../js/songs/demo.js';
 
 let passed = 0;
@@ -96,6 +97,56 @@ test('demo song synthesis + maps', () => {
     assert.ok(m.walls.length >= 4);
     console.log('       ' + d + ': ' + m.notes.length + ' notes, ' + m.bombs.length + ' bombs, ' + m.walls.length + ' walls');
   }
+});
+
+test('overhead barriers kept only when crouching is allowed', () => {
+  const map = { notes: [], bombs: [], walls: [{ t: 1, dur: 1, x: 0, w: 4, y: 2, h: 3 }, { t: 3, dur: 1, x: 0, w: 4, y: 0, h: 5 }] };
+  assert.equal(adaptMap(map, { allowCrouch: false }).walls.length, 0);
+  const a = adaptMap(map, { allowCrouch: true });
+  assert.equal(a.walls.length, 1); assert.equal(a.walls[0].y, 2);
+});
+
+test('barrier course generator fills gaps on the beat grid', () => {
+  const notes = [{ t: 2, x: 1, y: 0, c: 1, d: 1 }, { t: 3, x: 1, y: 0, c: 1, d: 1 }, { t: 14, x: 1, y: 0, c: 1, d: 1 }];
+  const g = generateBarriers({ notes, bombs: [], walls: [] }, { bpm: 120, allowCrouch: true, endTime: 20, seed: 3 });
+  assert.ok(g.added >= 3, 'added ' + g.added);
+  for (const w of g.walls) {
+    assert.ok((w.t > 3.9 && w.t + w.dur < 13.1) || (w.t >= 15 && w.t + w.dur <= 17.5), 'inside a gap: ' + w.t);
+    assert.ok(Math.abs(w.t / 0.5 - Math.round(w.t / 0.5)) < 1e-6, 'on beat');
+    assert.ok(w.y === 0 ? w.w <= 2 : w.w === 4, 'dodgeable pattern');
+  }
+  const noCrouch = generateBarriers({ notes, bombs: [], walls: [] }, { bpm: 120, allowCrouch: false, endTime: 20 });
+  assert.ok(noCrouch.walls.every(w => w.y === 0));
+});
+
+test('accelerometer duck -> crouch, then back to standing', () => {
+  globalThis.performance = globalThis.performance || { now: () => Date.now() };
+  let now = 0; const realNow = performance.now; performance.now = () => now;
+  const p = new PostureTracker();
+  const feed = (ay, secs) => { for (let t = 0; t < secs; t += 1 / 60) { now += 1000 / 60; p._onMotion({ accelerationIncludingGravity: { x: 0.05, y: ay, z: 0.1 }, interval: 16.7 }); p.update(1 / 60, null, 'auto', 1, null); } };
+  feed(9.81, 1.0);                       // standing still
+  assert.ok(p.crouch < 0.1, 'standing ' + p.crouch);
+  feed(9.81 - 5, 0.3);                   // duck: accelerate down (~45 cm total)
+  feed(9.81 + 5, 0.3);                   // brake at the bottom
+  let peak = 0; for (let i = 0; i < 20; i++) { feed(9.81, 1 / 60 * 3); peak = Math.max(peak, p.crouch); }
+  assert.ok(peak > 0.5, 'crouch detected ' + peak.toFixed(2));
+  feed(9.81, 4);
+  assert.ok(p.crouch < 0.2, 'recovers to standing ' + p.crouch.toFixed(2));
+  performance.now = realNow;
+});
+
+test('head tilt fallback: bow -> crouch, roll -> lean', () => {
+  const p = new PostureTracker();
+  const q = (pitchDeg, rollDeg) => { // YXZ with yaw 0: q = qx(pitch) * qz(roll)
+    const hp = pitchDeg * Math.PI / 360, hr = rollDeg * Math.PI / 360;
+    return { x: Math.sin(hp) * Math.cos(hr), y: -Math.sin(hp) * Math.sin(hr), z: Math.cos(hp) * Math.sin(hr), w: Math.cos(hp) * Math.cos(hr) };
+  };
+  for (let i = 0; i < 60; i++) p.update(1 / 60, q(-65, 0), 'tilt', 1, null);
+  assert.ok(p.crouch > 0.9, 'bowed ' + p.crouch);
+  for (let i = 0; i < 60; i++) p.update(1 / 60, q(-10, 0), 'tilt', 1, null);
+  assert.ok(p.crouch < 0.05);
+  for (let i = 0; i < 60; i++) p.update(1 / 60, q(0, 30), 'tilt', 1, null);
+  assert.ok(p.lean < -0.8, 'roll left -> lean left ' + p.lean);
 });
 
 // Optional: parse a real unzipped map directory.

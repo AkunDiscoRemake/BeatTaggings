@@ -44,6 +44,8 @@ export const LAYOUT = {
   despawnZ: 2.0,
   maxSpawnDistance: 28,
   lateralRange: 1.35,     // how far the touchpad can move the player sideways
+  crouchDrop: 0.6,        // how much the head/saber go down when fully crouched
+  leanMax: 0.32,          // sideways head offset when fully leaning
   headRadius: 0.16,
   // 3DoF "arm model": the saber pivots around this rig-relative point.
   saberPivot: { x: 0.22, y: 1.05, z: -0.28 },

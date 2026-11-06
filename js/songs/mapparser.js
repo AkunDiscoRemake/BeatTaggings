@@ -212,7 +212,7 @@ function pushWall(walls, sec, beat, durBeats, x, w, y, h, offset) {
 //  - walls that cannot be dodged sideways (full width) are removed; walls are flagged
 //    harmful only if they cover head height.
 export function adaptMap(map, options) {
-  const opts = Object.assign({ oneSaber: true, minGap: 0.11, lateralLanes: 2.7 }, options || {});
+  const opts = Object.assign({ oneSaber: true, minGap: 0.11, lateralLanes: 2.7, allowCrouch: false }, options || {});
   let notes = map.notes.slice();
   let bombs = map.bombs.slice();
 
@@ -245,8 +245,10 @@ export function adaptMap(map, options) {
   for (let i = 0; i < map.walls.length; i++) {
     const w = map.walls[i];
     const x0 = w.x, x1 = w.x + w.w;
-    if (x0 <= minL && x1 >= maxL) continue; // no escape route at all
-    if (x0 <= 0.05 && x1 >= 3.95) continue;  // spans the whole track (meant to be ducked: impossible in 3DoF)
+    const overhead = w.y >= 2; // top barrier: passed by crouching
+    if (overhead && opts.allowCrouch) { walls.push(Object.assign({}, w)); continue; }
+    if (x0 <= minL && x1 >= maxL) continue; // no sideways escape route at all
+    if (x0 <= 0.05 && x1 >= 3.95) continue;  // spans the whole track and crouching is off
     walls.push(Object.assign({}, w));
   }
 
@@ -270,4 +272,57 @@ export function spawnAheadSeconds(bpm, njs, startBeatOffset) {
   hjd += startBeatOffset || 0;
   if (hjd < 0.25) hjd = 0.25;
   return Math.min(2.2, Math.max(0.85, hjd * beatSec));
+}
+
+// Barrier course generator: fills note-free stretches (>= minGap seconds) with dodgeable
+// wall patterns on the beat grid. Patterns: left / right / center (dodge sideways) and,
+// when crouching is enabled, overhead bars (duck under them).
+export function generateBarriers(map, options) {
+  const o = Object.assign({ bpm: 120, allowCrouch: true, minGap: 2.6, endTime: 0, seed: 7 }, options || {});
+  const beat = 60 / Math.max(40, o.bpm);
+  let step = beat * 2;
+  while (step < 1.1) step *= 2;
+  while (step > 2.2) step /= 2;
+  let s = o.seed >>> 0;
+  const rand = function () { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+  const kinds = o.allowCrouch ? ['left', 'right', 'top', 'center', 'top'] : ['left', 'right', 'center'];
+  const times = map.notes.map(function (n) { return n.t; }).concat(map.bombs.map(function (b) { return b.t; }));
+  times.sort(function (a, b) { return a - b; });
+  const bounds = [1.5].concat(times);
+  bounds.push(Math.max(o.endTime || 0, times.length ? times[times.length - 1] : 0) - 1.5);
+  const walls = map.walls.slice();
+  const busy = function (t0, t1) {
+    for (let i = 0; i < walls.length; i++) {
+      const w = walls[i];
+      if (w.t < t1 + 0.6 && w.t + w.dur > t0 - 0.6) return true;
+    }
+    return false;
+  };
+  let last = '';
+  const added = [];
+  for (let i = 0; i < bounds.length - 1; i++) {
+    const a = bounds[i] + 1.0, b = bounds[i + 1] - 1.0;
+    if (bounds[i + 1] - bounds[i] < o.minGap || b - a < 0.4) continue;
+    // snap to the beat grid
+    for (let t = Math.ceil(a / beat) * beat; t + step * 0.5 <= b; t += step) {
+      let k;
+      do { k = kinds[Math.floor(rand() * kinds.length)]; } while (k === last && kinds.length > 1);
+      last = k;
+      const dur = Math.max(0.35, step * 0.45);
+      if (busy(t, t + dur)) continue;
+      let w;
+      if (k === 'left') w = { t: t, dur: dur, x: 0, w: 2, y: 0, h: 5 };
+      else if (k === 'right') w = { t: t, dur: dur, x: 2, w: 2, y: 0, h: 5 };
+      else if (k === 'center') w = { t: t, dur: dur, x: 1, w: 2, y: 0, h: 5 };
+      else w = { t: t, dur: dur, x: 0, w: 4, y: 2, h: 3 };
+      w.generated = true;
+      added.push(w);
+    }
+  }
+  return {
+    notes: map.notes,
+    bombs: map.bombs,
+    walls: walls.concat(added).sort(function (x, y) { return x.t - y.t; }),
+    added: added.length,
+  };
 }

@@ -16,7 +16,8 @@ import { Menu } from './ui/menu.js';
 import { Hud } from './ui/hud.js';
 import { BeatSaverClient } from './songs/beatsaver.js';
 import { downloadBinary, unpackPackage, loadDifficulty, bytesToImage } from './songs/loader.js';
-import { adaptMap } from './songs/mapparser.js';
+import { adaptMap, generateBarriers } from './songs/mapparser.js';
+import { PostureTracker } from './input/posture.js';
 import { synthesizeDemoSong, generateDemoMap, DEMO_INFO } from './songs/demo.js';
 
 const params = new URLSearchParams(window.location.search);
@@ -37,6 +38,8 @@ class App {
     this.loadToken = 0;
     this.cachedPackage = null; // { id, pkg, audioBuffer, cover }
     this.demoAudio = null;
+    this.posture = new PostureTracker();
+    this.headBaseY = 0; // 1.6 when the XR reference space is 'local' (eye level at origin)
 
     this._initRenderer();
     this._initScene();
@@ -159,6 +162,7 @@ class App {
     this.dom.cornerVr.addEventListener('click', function () { self.enterVR(); });
     this.dom.flat.addEventListener('click', function () {
       try { self.audio.ensure(); } catch (e) { /* shown later */ }
+      self.posture.start();
       self.dom.overlay.classList.add('hidden');
       self.dom.corner.classList.remove('hidden');
     });
@@ -208,6 +212,7 @@ class App {
   async enterVR() {
     if (!this.xrSupported || this.renderer.xr.isPresenting) return;
     try { this.audio.ensure(); } catch (e) { /* ignore */ }
+    this.posture.start();
     let session;
     try {
       session = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor'] });
@@ -219,7 +224,8 @@ class App {
       let type = 'local-floor';
       try { await session.requestReferenceSpace('local-floor'); } catch (e) { type = 'local'; }
       this.refSpaceType = type;
-      this.head.position.y = type === 'local' ? LAYOUT.headHeight : 0;
+      this.headBaseY = type === 'local' ? LAYOUT.headHeight : 0;
+      this.head.position.y = this.headBaseY;
       this.camera.position.set(0, 0, 0);
       this.camera.rotation.set(0, 0, 0);
       const q = this.quality();
@@ -249,7 +255,8 @@ class App {
 
   _onSessionEnd() {
     this.pauseGame();
-    this.head.position.y = 0;
+    this.headBaseY = 0;
+    this.head.position.set(0, 0, 0);
     this.camera.position.set(0, LAYOUT.headHeight, 0);
     this.camera.rotation.set(-0.1, 0, 0);
     this.camera.aspect = window.innerWidth / window.innerHeight;
@@ -311,7 +318,11 @@ class App {
       }
       if (cancelled()) return;
       const oneSaber = this.settings.get('oneSaberFilter') && characteristic !== 'OneSaber';
-      const adapted = adaptMap(map, { oneSaber: oneSaber, lateralLanes: LAYOUT.lateralRange / LAYOUT.laneWidth });
+      const allowCrouch = this.settings.get('posture') !== 'off';
+      let adapted = adaptMap(map, { oneSaber: oneSaber, lateralLanes: LAYOUT.lateralRange / LAYOUT.laneWidth, allowCrouch: allowCrouch });
+      if (this.settings.get('extraBarriers')) {
+        adapted = generateBarriers(adapted, { bpm: bpm, allowCrouch: allowCrouch, endTime: audioBuffer.duration, seed: hashString(entry.id + difficulty) });
+      }
       if (!adapted.notes.length && !adapted.walls.length) throw new Error('O mapa não tem notas jogáveis');
       this.current = { entry: entry, characteristic: characteristic, difficulty: difficulty };
       this.game.load({ title: entry.title, audioBuffer: audioBuffer, bpm: bpm, map: adapted, njs: njs, startBeatOffset: offset });
@@ -415,6 +426,24 @@ class App {
     }
     const k = Math.min(1, dt * 11);
     this.rig.position.x += (target - this.rig.position.x) * k;
+
+    // posture: crouch (duck under overhead barriers) and lean
+    const pmode = this.settings.get('posture');
+    const touch = this.input;
+    if (DEBUG_AUTOPLAY && st === 'playing') {
+      this.posture.force(this.game.autoCrouch(), 0, dt);
+    } else if (!this.input.isXR) {
+      this.posture.force(pmode !== 'off' && this.input.crouchKey ? 1 : 0, pmode !== 'off' ? this.input.leanKey : 0, dt);
+      this.posture.source = 'teclado (S = agachar, Q/E = inclinar)';
+    } else {
+      this.posture.update(dt, this.camera.quaternion, pmode, this.settings.get('postureSens'), { active: touch.touchActive, x: touch.touchX, y: touch.touchY });
+    }
+    const applyPosture = st === 'playing' || st === 'countdown' || st === 'finishing';
+    const crouch = applyPosture ? this.posture.crouch : 0;
+    const lean = applyPosture ? this.posture.lean : 0;
+    this.head.position.set(lean * LAYOUT.leanMax, this.headBaseY - crouch * LAYOUT.crouchDrop, 0);
+    const sp = LAYOUT.saberPivot;
+    this.saber.group.position.set(sp.x + lean * LAYOUT.leanMax * 0.7, sp.y - crouch * LAYOUT.crouchDrop * 0.8, sp.z);
     this.rig.updateMatrixWorld(true);
 
     this.saber.update(dt, this.input.orientation);
@@ -422,7 +451,6 @@ class App {
     // head position for wall collisions
     this.camera.updateMatrixWorld();
     this._head.setFromMatrixPosition(this.camera.matrixWorld);
-    if (!this.renderer.xr.isPresenting) this._head.y = LAYOUT.headHeight;
 
     const menuVisible = st === 'menu' || st === 'loading' || st === 'paused' || st === 'results' || st === 'countdown';
     this.panel.mesh.visible = menuVisible;
@@ -450,7 +478,11 @@ class App {
     } else if (st === 'countdown' || st === 'paused' || st === 'finishing') {
       this.game.update(0, this._head); // keep objects drawn (frozen)
     }
-    if (this.hud.group.visible) this.hud.update(dt, this.game, this.fps, this.settings.get('showFps'));
+    if (this.hud.group.visible) this.hud.update(dt, this.game, this.fps, this.settings.get('showFps'), this.posture.crouch, st === 'playing' ? this.game.upcomingBarrier() : null);
+    if (this.menu.screen === 'posture' && st === 'menu') {
+      this._postureRedraw = (this._postureRedraw || 0) + dt;
+      if (this._postureRedraw > 0.1) { this._postureRedraw = 0; this.menu.invalidate(); }
+    }
 
     // menus: pointer + click
     if (menuVisible && st !== 'countdown') {
@@ -497,6 +529,12 @@ class App {
     this.reticle.visible = !!hit;
     if (hit) this.reticle.position.copy(hit.point).addScaledVector(this.input.pointerDir, -0.01);
   }
+}
+
+function hashString(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
 }
 
 function nextFrame() {

@@ -103,7 +103,7 @@ try {
     await page.goto(base + '?demo=Normal&autoplay=1', { waitUntil: 'load' });
     const t0 = Date.now();
     if (shotsDir) {
-      for (const [at, name] of [[24, '08-drop'], [47, '09-walls']]) {
+      for (const [at, name] of [[24, '08-drop'], [47.4, '09-walls'], [49.5, '10-crouch']]) {
         await page.waitForFunction((t) => window.__bt && window.__bt.state === 'playing' && window.__bt.game.songTime > t, at, { timeout: 120000, polling: 50 });
         await page.screenshot({ path: path.join(shotsDir, name + '.png') });
       }
@@ -118,6 +118,7 @@ try {
     check(!r.failed, 'song completed');
     check(r.hits / r.totalNotes > 0.85, 'autoplay hit rate ' + (r.hits / r.totalNotes * 100).toFixed(1) + '%');
     check(r.score > 0, 'score > 0');
+    check(r.wallHits === 0, 'all barriers dodged (side + overhead), wallHits=' + r.wallHits);
     if (shotsDir) await page.screenshot({ path: path.join(shotsDir, '07-results.png') });
     check(errors.length === 0, 'no JS errors (' + errors.join(' | ') + ')');
     await page.close();

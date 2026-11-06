@@ -14,6 +14,9 @@ export const DEFAULT_SETTINGS = {
   sfxVolume: 0.7,
   moveMode: 'absolute',     // absolute (touch position = body position) | velocity
   showFps: false,
+  posture: 'auto',          // auto (accelerometer + head tilt) | tilt | touchpad | off
+  postureSens: 1.0,         // 0.7 low .. 1.4 high
+  extraBarriers: true,      // generate barrier courses in note-free stretches
 };
 
 function safeGet(key) {

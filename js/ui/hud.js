@@ -49,12 +49,15 @@ export class Hud {
 
   flashDamage(a) { this.damage = Math.min(0.8, this.damage + a); }
 
-  update(dt, game, fps, showFps) {
+  update(dt, game, fps, showFps, crouch, warn) {
     const sc = game.score;
     const st = this.state;
     const changedL = st.score !== sc.score || st.combo !== sc.combo || st.mult !== sc.multiplier || st.multProg !== sc.multiplierProgress || (showFps && Math.round(fps) !== st.fps);
     const prog = game.progress;
-    const changedR = Math.abs(st.energy - sc.energy) > 0.004 || Math.abs(st.progress - prog) > 0.004;
+    const changedR = Math.abs(st.energy - sc.energy) > 0.004 || Math.abs(st.progress - prog) > 0.004 ||
+      st.warn !== (warn || null) || Math.abs((st.crouch || 0) - (crouch || 0)) > 0.05 || st.inWall !== game.inWall;
+    st.warn = warn || null;
+    st.crouch = crouch || 0;
     st.score = sc.score; st.combo = sc.combo; st.mult = sc.multiplier; st.multProg = sc.multiplierProgress;
     st.energy = Math.max(0, sc.energy); st.progress = prog; st.time = Math.max(0, game.songTime); st.total = game.endTime || 0;
     st.fps = Math.round(fps); st.showFps = showFps; st.acc = sc.accuracy;
@@ -103,9 +106,14 @@ export class Hud {
     p.text(s.title, 30, 44, 30, '#ffffff', 'left', '800', 452);
     p.text(fmtTime(s.time) + ' / ' + fmtTime(s.total), 30, 96, 28, CSS_COLORS.dim, 'left', '600');
     p.bar(30, 124, 452, 18, s.progress, CSS_COLORS.purpleHot);
-    p.text('ENERGIA', 30, 190, 26, CSS_COLORS.dim, 'left', '700');
+    p.text('ENERGIA', 30, 170, 26, CSS_COLORS.dim, 'left', '700');
     const ec = s.energy > 0.3 ? CSS_COLORS.good : CSS_COLORS.bad;
-    p.bar(30, 214, 452, 30, s.energy, ec);
-    if (s.inWall) p.glowText('DESVIE!', 256, 284, 40, '#ffffff', CSS_COLORS.bad, 'center');
+    p.bar(30, 192, 452, 26, s.energy, ec);
+    // posture meter (crouch)
+    p.text(s.crouch > 0.5 ? 'AGACHADO' : 'EM PÉ', 30, 246, 22, s.crouch > 0.5 ? CSS_COLORS.purpleHot : CSS_COLORS.dim, 'left', '800');
+    p.bar(170, 236, 312, 18, s.crouch, CSS_COLORS.purpleHot);
+    if (s.inWall) p.glowText('DESVIE!', 256, 290, 40, '#ffffff', CSS_COLORS.bad, 'center');
+    else if (s.warn === 'crouch') p.glowText('▼ ABAIXE! ▼', 256, 290, 40, '#ffffff', CSS_COLORS.note0, 'center');
+    else if (s.warn === 'side') p.glowText('◀ DESVIE ▶', 256, 290, 36, '#ffffff', CSS_COLORS.purple, 'center');
   }
 }
